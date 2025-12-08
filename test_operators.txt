@@ -1,0 +1,15 @@
+// Test file for multi-character operators
+int i = 0;
+i++;
+i--;
+if (i == 5) {
+    i += 10;
+    i -= 5;
+}
+int x = 10 << 2;
+int y = 20 >> 1;
+bool check = (x != y);
+bool result = (a && b) || (c >= d);
+int ptr->value;
+string name = name ?? "default";
+obj?.Method();
