@@ -491,6 +491,40 @@ namespace LexicalAnalyzer
             }
         }
 
+        // Export the contents of outputBox to a file (UTF-8). Saves plain text by default.
+        // Filter allows .txt and .csv; content is exported as the same human-readable lines shown in outputBox.
+        private void ExportOutput()
+        {
+            if (string.IsNullOrWhiteSpace(outputBox.Text))
+            {
+                MessageBox.Show("There is no output to export.", "Export", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            using (var sfd = new SaveFileDialog())
+            {
+                sfd.Filter = "Text Files (*.txt)|*.txt|CSV Files (*.csv)|*.csv|All Files (*.*)|*.*";
+                sfd.DefaultExt = "txt";
+                sfd.FileName = "lexical_output.txt";
+
+                if (sfd.ShowDialog() == DialogResult.OK)
+                {
+                    try
+                    {
+                        System.IO.File.WriteAllText(sfd.FileName, "Total Tokens: " + tokenCount + ",\n" + outputBox.Text, Encoding.UTF8);
+                        MessageBox.Show("Export completed.", "Export", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show("Export failed: " + ex.Message, "Export", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
+            }
+        }
+
+        // Event handler wired in Designer
+        private void exportBtn_Click(object sender, EventArgs e) => ExportOutput();
+
         private void analyzed_Click(object sender, EventArgs e) => Program();
         private void find_Click(object sender, EventArgs e) => BrowseFile();
 

@@ -35,6 +35,7 @@
             this.outputBox = new System.Windows.Forms.RichTextBox();
             this.openFileDialog1 = new System.Windows.Forms.OpenFileDialog();
             this.clearBtn = new System.Windows.Forms.Button();
+            this.exportBtn = new System.Windows.Forms.Button();
             this.label1 = new System.Windows.Forms.Label();
             this.label2 = new System.Windows.Forms.Label();
             this.label3 = new System.Windows.Forms.Label();
@@ -93,7 +94,7 @@
             this.analyzed.Location = new System.Drawing.Point(869, 59);
             this.analyzed.Margin = new System.Windows.Forms.Padding(4);
             this.analyzed.Name = "analyzed";
-            this.analyzed.Size = new System.Drawing.Size(160, 34);
+            this.analyzed.Size = new System.Drawing.Size(138, 34);
             this.analyzed.TabIndex = 4;
             this.analyzed.Text = "Analyze";
             this.analyzed.UseVisualStyleBackColor = false;
@@ -109,7 +110,7 @@
             this.outputBox.Margin = new System.Windows.Forms.Padding(4);
             this.outputBox.Name = "outputBox";
             this.outputBox.ReadOnly = true;
-            this.outputBox.Size = new System.Drawing.Size(505, 467);
+            this.outputBox.Size = new System.Drawing.Size(594, 467);
             this.outputBox.TabIndex = 5;
             this.outputBox.Text = "";
             // 
@@ -126,7 +127,7 @@
             this.clearBtn.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.clearBtn.Font = new System.Drawing.Font("Segoe UI Semibold", 9.75F, System.Drawing.FontStyle.Bold);
             this.clearBtn.ForeColor = System.Drawing.Color.White;
-            this.clearBtn.Location = new System.Drawing.Point(1037, 59);
+            this.clearBtn.Location = new System.Drawing.Point(1015, 59);
             this.clearBtn.Margin = new System.Windows.Forms.Padding(4);
             this.clearBtn.Name = "clearBtn";
             this.clearBtn.Size = new System.Drawing.Size(133, 34);
@@ -134,6 +135,22 @@
             this.clearBtn.Text = "Clear";
             this.clearBtn.UseVisualStyleBackColor = false;
             this.clearBtn.Click += new System.EventHandler(this.clearBtn_Click);
+            // 
+            // exportBtn
+            // 
+            this.exportBtn.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(139)))), ((int)(((byte)(90)))), ((int)(((byte)(60)))));
+            this.exportBtn.FlatAppearance.BorderSize = 0;
+            this.exportBtn.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.exportBtn.Font = new System.Drawing.Font("Segoe UI Semibold", 9.75F, System.Drawing.FontStyle.Bold);
+            this.exportBtn.ForeColor = System.Drawing.Color.White;
+            this.exportBtn.Location = new System.Drawing.Point(1156, 59);
+            this.exportBtn.Margin = new System.Windows.Forms.Padding(4);
+            this.exportBtn.Name = "exportBtn";
+            this.exportBtn.Size = new System.Drawing.Size(133, 34);
+            this.exportBtn.TabIndex = 11;
+            this.exportBtn.Text = "Export";
+            this.exportBtn.UseVisualStyleBackColor = false;
+            this.exportBtn.Click += new System.EventHandler(this.exportBtn_Click);
             // 
             // label1
             // 
@@ -189,12 +206,13 @@
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 16F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(235)))), ((int)(((byte)(220)))), ((int)(((byte)(200)))));
-            this.ClientSize = new System.Drawing.Size(1227, 628);
+            this.ClientSize = new System.Drawing.Size(1317, 628);
             this.Controls.Add(this.tokenCountLabel);
             this.Controls.Add(this.label3);
             this.Controls.Add(this.label2);
             this.Controls.Add(this.label1);
             this.Controls.Add(this.clearBtn);
+            this.Controls.Add(this.exportBtn);
             this.Controls.Add(this.outputBox);
             this.Controls.Add(this.analyzed);
             this.Controls.Add(this.textBox);
@@ -218,6 +236,7 @@
         private System.Windows.Forms.RichTextBox outputBox;
         private System.Windows.Forms.OpenFileDialog openFileDialog1;
         private System.Windows.Forms.Button clearBtn;
+        private System.Windows.Forms.Button exportBtn;
         private System.Windows.Forms.Label label1;
         private System.Windows.Forms.Label label2;
         private System.Windows.Forms.Label label3;
