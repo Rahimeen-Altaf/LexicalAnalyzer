@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Windows.Forms;
+using System.Globalization;
 
 namespace LexicalAnalyzer
 {
@@ -11,133 +12,92 @@ namespace LexicalAnalyzer
     {
         public Form1() => InitializeComponent();
 
-        // Separators: punctuation that separates code elements
-        private static String[] separators = { ";", "{", "}", ":", ".", "(", ")", "[", "]", "," };
+        // Separators: punctuation that separates code elements (single-char)
+        private static readonly string[] separators = { ";", "{", "}", ":", ".", "(", ")", "[", "]", "," };
+        private static readonly HashSet<char> separatorChars = new HashSet<char>(separators.Select(s => s[0]));
 
-        // Operators: symbols that perform operations
-        // Multi-character operators MUST be listed before their single-character components
-        private static String[] operators = {
-            // 3-character operators first
+        // Operators: list multi-char first is ensured by sorting when used
+        private static readonly string[] operators = {
             ">>>=", "<<<=",
-            // 2-character operators
             "&&", "||", "++", "--", "==", "<=", ">=", "!=", "+=", "-=", "*=", "/=", "%=",
             "->", "??", "?.", "<<", ">>",
-            // Single-character operators (NO parentheses/brackets - those are separators)
             "+", "-", "*", "/", "%", "=", "<", ">", "!", "?", "&", "|", "~", "^", "`"
         };
 
-        // Expanded keywords for C#, Java, Python, JavaScript, and C++
-        private static String[] keywords = {
-            // C# keywords
-            "abstract", "as", "base", "bool", "break", "by", "byte", "case", "catch",
-            "char", "checked", "class", "const", "continue", "decimal", "default", "delegate", "do", "double",
-            "descending", "explicit", "event", "extern", "else", "enum", "false", "finally", "fixed", "float", "for",
-            "foreach", "from", "goto", "group", "if", "implicit", "in", "int", "interface", "internal", "into", "is",
-            "lock", "long", "new", "null", "namespace", "object", "operator", "out", "override", "orderby", "params",
-            "private", "protected", "public", "readonly", "ref", "return", "switch", "struct", "sbyte", "sealed", "short",
-            "sizeof", "stackalloc", "static", "string", "select", "this", "throw", "true", "try", "typeof", "uint", "ulong",
-            "unchecked", "unsafe", "ushort", "using", "var", "virtual", "volatile", "void", "while", "where", "yield",
-            "async", "await", "nameof", "when", "record", "init", "with", "not", "and", "or",
-
-            // Additional common keywords from other languages
-            "function", "let", "const", "def", "lambda", "import", "export", "module", "package",
-            "extends", "implements", "super", "constructor", "final", "synchronized", "transient",
-            "assert", "native", "strictfp", "instanceof", "template", "typename", "auto", "register",
-            "union", "typedef", "inline", "friend", "mutable", "explicit", "virtual", "nullptr",
-            "pass", "raise", "except", "finally", "with", "as", "global", "nonlocal", "yield",
-            "async", "await", "match", "case", "elif", "then", "end", "begin", "repeat", "until"
+        // Keywords (expanded)
+        private static readonly HashSet<string> keywords = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "abstract","as","base","bool","break","by","byte","case","catch","char","checked","class","const","continue",
+            "decimal","default","delegate","do","double","descending","explicit","event","extern","else","enum","false",
+            "finally","fixed","float","for","foreach","from","goto","group","if","implicit","in","int","interface","internal",
+            "into","is","lock","long","new","null","namespace","object","operator","out","override","orderby","params",
+            "private","protected","public","readonly","ref","return","switch","struct","sbyte","sealed","short","sizeof",
+            "stackalloc","static","string","select","this","throw","true","try","typeof","uint","ulong","unchecked","unsafe",
+            "ushort","using","var","virtual","volatile","void","while","where","yield","async","await","nameof","when",
+            "record","init","with","not","and","or","function","let","const","def","lambda","import","export","module",
+            "package","extends","implements","super","constructor","final","synchronized","transient","assert","native",
+            "strictfp","instanceof","template","typename","auto","register","union","typedef","inline","friend","mutable",
+            "explicit","virtual","nullptr","pass","raise","except","finally","with","as","global","nonlocal","yield",
+            "async","await","match","case","elif","then","end","begin","repeat","until"
         };
 
-        private static String[] comments = { "//", "/*", "*/" };
-        private static String[] constants = { "\"", "\'" };
-        private static String[] words;
-        private static String data = "";
         private int tokenCount = 0;
 
-        private static bool CheckSeparator(String str) => separators.Contains(str);
-        private static bool CheckOperators(String str) => operators.Contains(str);
-        private static bool CheckKeywords(String str) => keywords.Contains(str);
-        private static bool CheckComments(String str) => comments.Contains(str);
-        private static bool CheckConstants(String str) => constants.Contains(str);
+        // Pre-sorted operators for quick matching (longest first)
+        private readonly string[] sortedOperators = operators.OrderByDescending(o => o.Length).ToArray();
 
         public void Program()
         {
             outputBox.Text = "";
             tokenCount = 0;
-            data = textBox.Text;
 
-            // Step 1: Remove comments first (before adding spaces)
-            data = RemoveComments(data);
+            string code = textBox.Text ?? "";
 
-            // Step 2: Sort operators by length (longest first) to ensure multi-char operators are processed first
-            var sortedOperators = operators.OrderByDescending(op => op.Length).ToArray();
+            // Remove comments but preserve string/char literals (so comment markers inside strings are not removed)
+            code = RemoveComments(code);
 
-            // Step 3: Protect multi-character operators from being split by separator processing.
-            // We'll replace each operator with a unique marker that won't be modified when we add spaces around separators.
-            var markerMap = new Dictionary<string, string>(); // marker -> operator
-            for (int j = 0; j < sortedOperators.Length; j++)
-            {
-                string op = sortedOperators[j];
-                // create a simple unique marker using index and a GUID fragment to avoid collisions
-                string marker = $"__OP_{j}_{Guid.NewGuid().ToString("N").Substring(0, 8)}__";
-                markerMap[marker] = op;
-                data = data.Replace(op, marker);
-            }
+            // Tokenize with a simple single-pass scanner that preserves string/char literals (including spaces/newlines)
+            var tokens = Tokenize(code);
 
-            // Step 4: Add spaces around separators (now safe because operators are protected by markers)
-            for (int i = 0; i < separators.Length; i++)
-                data = data.Replace(separators[i], " " + separators[i] + " ");
-
-            // Step 5: Restore operators from markers as distinct tokens (add spaces around them)
-            foreach (var kvp in markerMap)
-            {
-                string marker = kvp.Key;
-                string op = kvp.Value;
-                data = data.Replace(marker, " " + op + " ");
-            }
-
-            // Step 6: Normalize common whitespace characters into spaces
-            data = data.Replace("\r", " ");
-            data = data.Replace("\n", " ");
-            data = data.Replace("\t", " ");
-
-            // Step 7: Split by spaces and filter empty strings (collapses multiple spaces automatically)
-            words = data.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-
-            // Step 8: Analyze each word
-            for (int i = 0; i < words.Length; i++)
-                CheckLexicalAnalyzer(words[i]);
+            // Analyze tokens (classify and print)
+            foreach (var tok in tokens)
+                CheckLexicalAnalyzer(tok);
 
             // Update token count label
             tokenCountLabel.Text = $"Total Tokens: {tokenCount}";
         }
 
+        // Remove comments while preserving string/char literals
         private string RemoveComments(string code)
         {
-            StringBuilder result = new StringBuilder();
-            int i = 0;
+            if (string.IsNullOrEmpty(code))
+                return code;
 
+            var sb = new StringBuilder(code.Length);
+            int i = 0;
             while (i < code.Length)
             {
-                // Check for single-line comment //
-                if (i < code.Length - 1 && code[i] == '/' && code[i + 1] == '/')
+                // If we encounter a string or char literal, copy it verbatim (including escaped quotes) to avoid stripping comment markers inside it
+                if (code[i] == '"' || code[i] == '\'')
                 {
-                    // Skip until end of line
-                    while (i < code.Length && code[i] != '\n')
-                        i++;
-                    continue;
-                }
-
-                // Check for multi-line comment /* */
-                if (i < code.Length - 1 && code[i] == '/' && code[i + 1] == '*')
-                {
-                    i += 2; // Skip /*
-                    // Skip until we find */
-                    while (i < code.Length - 1)
+                    char quote = code[i];
+                    sb.Append(code[i++]);
+                    while (i < code.Length)
                     {
-                        if (code[i] == '*' && code[i + 1] == '/')
+                        // copy char
+                        if (code[i] == '\\' && i + 1 < code.Length)
                         {
-                            i += 2; // Skip */
+                            // escaped sequence, copy both
+                            sb.Append(code[i]);
+                            sb.Append(code[i + 1]);
+                            i += 2;
+                            continue;
+                        }
+
+                        sb.Append(code[i]);
+                        if (code[i] == quote)
+                        {
+                            i++;
                             break;
                         }
                         i++;
@@ -145,91 +105,374 @@ namespace LexicalAnalyzer
                     continue;
                 }
 
-                // Regular character, keep it
-                result.Append(code[i]);
+                // Single-line comment //
+                if (i + 1 < code.Length && code[i] == '/' && code[i + 1] == '/')
+                {
+                    // skip until end of line or end of file
+                    i += 2;
+                    while (i < code.Length && code[i] != '\n')
+                        i++;
+                    continue;
+                }
+
+                // Multi-line comment /* ... */
+                if (i + 1 < code.Length && code[i] == '/' && code[i + 1] == '*')
+                {
+                    i += 2;
+                    while (i + 1 < code.Length)
+                    {
+                        if (code[i] == '*' && code[i + 1] == '/')
+                        {
+                            i += 2;
+                            break;
+                        }
+                        i++;
+                    }
+                    continue;
+                }
+
+                // Python single-line comment starting with #
+                // This is checked here (after literal handling) so '#' inside a string is preserved.
+                if (code[i] == '#')
+                {
+                    // skip until end of line or end of file
+                    i++;
+                    while (i < code.Length && code[i] != '\n')
+                        i++;
+                    continue;
+                }
+
+                // otherwise copy char
+                sb.Append(code[i]);
                 i++;
             }
 
-            return result.ToString();
+            return sb.ToString();
         }
 
-        private String Parse(String item)
+        // Single-pass tokenizer: preserves strings (with spaces/newlines), handles unclosed quotes as an error token
+        private List<string> Tokenize(string code)
         {
-            StringBuilder str = new StringBuilder();
+            var result = new List<string>();
+            int i = 0;
+            int n = code.Length;
 
-            if (CheckSeparator(item) == true)
-                str.Append(" (separator, <" + item + ">) ");
-            else if (CheckOperators(item) == true)
-                str.Append(" (operators, <" + item + ">) ");
-            else if (CheckKeywords(item) == true)
-                str.Append(" (keywords, <" + item + ">) ");
-            else if (item.Equals("\r") || item.Equals("\n") || item.Equals("\r\n"))
-                str.Append(" (NewLine, <" + item + ">) ");
-            else
-                str.Append(" (identifier, <" + item + ">) ");
-            return str.ToString();
+            while (i < n)
+            {
+                char c = code[i];
+
+                // Whitespace (including newlines) - skip as delimiter
+                if (char.IsWhiteSpace(c))
+                {
+                    i++;
+                    continue;
+                }
+
+                // String or char literal
+                if (c == '"' || c == '\'')
+                {
+                    char quote = c;
+                    var sb = new StringBuilder();
+                    sb.Append(quote);
+                    i++;
+                    bool closed = false;
+
+                    while (i < n)
+                    {
+                        // support escaped characters
+                        if (code[i] == '\\' && i + 1 < n)
+                        {
+                            sb.Append(code[i]);
+                            sb.Append(code[i + 1]);
+                            i += 2;
+                            continue;
+                        }
+
+                        sb.Append(code[i]);
+
+                        if (code[i] == quote)
+                        {
+                            i++;
+                            closed = true;
+                            break;
+                        }
+
+                        i++;
+                    }
+
+                    if (!closed)
+                    {
+                        // Unterminated string/char literal -> mark as error token (preserve content)
+                        result.Add(sb.ToString()); // content without closing quote
+                        // We'll let CheckLexicalAnalyzer detect/print an error message for unterminated strings
+                    }
+                    else
+                    {
+                        result.Add(sb.ToString());
+                    }
+
+                    continue;
+                }
+
+                // Number literal (integer or float) - support forms like 123, 123.45, .5, 1e-3, trailing suffix f/F/d/D/m/M
+                if (char.IsDigit(c) || (c == '.' && i + 1 < n && char.IsDigit(code[i + 1])))
+                {
+                    var sbNum = new StringBuilder();
+                    bool hasDot = false;
+                    bool hasExp = false;
+
+                    // leading dot (e.g. .5)
+                    if (c == '.')
+                    {
+                        hasDot = true;
+                        sbNum.Append('.');
+                        i++;
+                    }
+
+                    // main loop: digits, optional single dot, optional exponent
+                    while (i < n)
+                    {
+                        char cur = code[i];
+
+                        if (char.IsDigit(cur))
+                        {
+                            sbNum.Append(cur);
+                            i++;
+                            continue;
+                        }
+
+                        // decimal point
+                        if (cur == '.' && !hasDot && !hasExp && i + 1 < n && char.IsDigit(code[i + 1]))
+                        {
+                            hasDot = true;
+                            sbNum.Append(cur);
+                            i++;
+                            continue;
+                        }
+
+                        // exponent part
+                        if ((cur == 'e' || cur == 'E') && !hasExp)
+                        {
+                            hasExp = true;
+                            sbNum.Append(cur);
+                            i++;
+                            // optional sign after exponent
+                            if (i < n && (code[i] == '+' || code[i] == '-'))
+                            {
+                                sbNum.Append(code[i]);
+                                i++;
+                            }
+                            // digits after exponent
+                            bool expDigits = false;
+                            while (i < n && char.IsDigit(code[i]))
+                            {
+                                expDigits = true;
+                                sbNum.Append(code[i]);
+                                i++;
+                            }
+                            // if there were no digits after exponent, break (we keep what we have; parser may flag)
+                            if (!expDigits)
+                                break;
+                            continue;
+                        }
+
+                        break;
+                    }
+
+                    // optional suffix characters commonly used in C# (f, F, d, D, m, M)
+                    if (i < n)
+                    {
+                        char suf = code[i];
+                        if (suf == 'f' || suf == 'F' || suf == 'd' || suf == 'D' || suf == 'm' || suf == 'M')
+                        {
+                            sbNum.Append(suf);
+                            i++;
+                        }
+                    }
+
+                    result.Add(sbNum.ToString());
+                    continue;
+                }
+
+                // Operators (try to match longest operator at position)
+                bool matchedOperator = false;
+                foreach (var op in sortedOperators)
+                {
+                    if (i + op.Length <= n && code.Substring(i, op.Length) == op)
+                    {
+                        result.Add(op);
+                        i += op.Length;
+                        matchedOperator = true;
+                        break;
+                    }
+                }
+                if (matchedOperator)
+                    continue;
+
+                // Separators (single-char)
+                if (separatorChars.Contains(c))
+                {
+                    result.Add(c.ToString());
+                    i++;
+                    continue;
+                }
+
+                // Identifier / other token: consume until whitespace or operator/separator/quote
+                var tokenSb = new StringBuilder();
+                while (i < n)
+                {
+                    char cur = code[i];
+
+                    // break on whitespace, separators, quotes, or start of any operator
+                    if (char.IsWhiteSpace(cur) || cur == '"' || cur == '\'' || separatorChars.Contains(cur))
+                        break;
+
+                    // detect operator start: check if any operator begins here (we only need to check first char)
+                    bool opStarts = false;
+                    foreach (var op in sortedOperators)
+                    {
+                        if (op.Length > 0 && cur == op[0])
+                        {
+                            // if the full operator matches ahead we should stop identifier here
+                            if (i + op.Length <= n && code.Substring(i, op.Length) == op)
+                            {
+                                opStarts = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (opStarts)
+                        break;
+
+                    tokenSb.Append(cur);
+                    i++;
+                }
+
+                if (tokenSb.Length > 0)
+                    result.Add(tokenSb.ToString());
+                else
+                {
+                    // If we get here, consume one char to avoid infinite loop
+                    result.Add(code[i].ToString());
+                    i++;
+                }
+            }
+
+            return result;
         }
 
-        private void CheckLexicalAnalyzer(String str)
+        // Classify token and print to outputBox similar to original behaviour.
+        // This also handles unterminated strings as an error.
+        private void CheckLexicalAnalyzer(string str)
         {
-            // Skip empty strings
             if (string.IsNullOrWhiteSpace(str))
                 return;
 
-            // Check the WHOLE string first (this handles multi-character operators correctly)
-            int intValue;
-
-            // Check if it's an integer
-            if (Int32.TryParse(str, out intValue))
+            // Unterminated string/char (starts with quote but does not end with same quote)
+            if ((str.StartsWith("\"") && !str.EndsWith("\"")) || (str.StartsWith("'") && !str.EndsWith("'")))
             {
-                outputBox.Text += (" (integerValue, <" + str + ">) ") + "\n";
+                outputBox.AppendText($" (UnterminatedLiteral, <{EscapeForDisplay(str)}>)\n");
                 tokenCount++;
                 return;
             }
 
-            // Check if it's an operator (including multi-character like ++, --, ==, etc.)
-            if (CheckOperators(str))
+            // Integer
+            if (Int32.TryParse(str, out _))
             {
-                outputBox.Text += (" (operators, <" + str + ">) ") + "\n";
+                outputBox.AppendText($" (integerValue, <{str}>)\n");
                 tokenCount++;
                 return;
             }
 
-            // Check if it's a separator
-            if (CheckSeparator(str))
+            // Float / Real numbers (detect decimals, exponent, and common suffixes f/F/d/D/m/M)
+            if (IsFloatLiteral(str))
             {
-                outputBox.Text += (" (separator, <" + str + ">) ") + "\n";
+                outputBox.AppendText($" (floatValue, <{str}>)\n");
                 tokenCount++;
                 return;
             }
 
-            // Check if it's a keyword
-            if (CheckKeywords(str))
+            // Operators
+            if (sortedOperators.Contains(str))
             {
-                outputBox.Text += (" (keywords, <" + str + ">) ") + "\n";
+                outputBox.AppendText($" (operators, <{str}>)\n");
                 tokenCount++;
                 return;
             }
 
-            // Check if it's a string literal
-            if (str.StartsWith("\"") && str.EndsWith("\""))
+            // Separators
+            if (separators.Contains(str))
             {
-                outputBox.Text += (" (String, <" + str + ">) ") + "\n";
+                outputBox.AppendText($" (separator, <{str}>)\n");
                 tokenCount++;
                 return;
             }
 
-            // Check if it's a character literal
-            if (str.StartsWith("\'") && str.EndsWith("\'"))
+            // Keywords
+            if (keywords.Contains(str))
             {
-                outputBox.Text += (" (Char, <" + str + ">) ") + "\n";
+                outputBox.AppendText($" (keywords, <{str}>)\n");
                 tokenCount++;
                 return;
             }
 
-            // Otherwise, it's an identifier
-            outputBox.Text += (" (identifier, <" + str + ">) ") + "\n";
+            // String literal (closed)
+            if (str.Length >= 2 && str.StartsWith("\"") && str.EndsWith("\""))
+            {
+                outputBox.AppendText($" (String, <{EscapeForDisplay(str)}>)\n");
+                tokenCount++;
+                return;
+            }
+
+            // Char literal (closed)
+            if (str.Length >= 2 && str.StartsWith("'") && str.EndsWith("'"))
+            {
+                outputBox.AppendText($" (Char, <{EscapeForDisplay(str)}>)\n");
+                tokenCount++;
+                return;
+            }
+
+            // Default: identifier
+            outputBox.AppendText($" (identifier, <{str}>)\n");
             tokenCount++;
+        }
+
+        // Helper: determine if token is a floating literal (supports 123.45, .5, 1e-3, trailing f/F/d/D/m/M)
+        private bool IsFloatLiteral(string s)
+        {
+            if (string.IsNullOrWhiteSpace(s))
+                return false;
+
+            string body = s;
+            char suffix = '\0';
+            if (s.Length > 1)
+            {
+                char last = s[s.Length - 1];
+                if (last == 'f' || last == 'F' || last == 'd' || last == 'D' || last == 'm' || last == 'M')
+                {
+                    suffix = last;
+                    body = s.Substring(0, s.Length - 1);
+                    if (body.Length == 0)
+                        return false;
+                }
+            }
+
+            // Try double parse for typical float/double formats
+            double d;
+            if (double.TryParse(body, NumberStyles.Float, CultureInfo.InvariantCulture, out d))
+                return true;
+
+            // If suffix is decimal 'm' try decimal parse
+            if ((suffix == 'm' || suffix == 'M') && decimal.TryParse(body, NumberStyles.Number, CultureInfo.InvariantCulture, out _))
+                return true;
+
+            return false;
+        }
+
+        // Simple helper to make newlines/returns visible in outputBox display for literals
+        private string EscapeForDisplay(string s)
+        {
+            return s.Replace("\r", "\\r").Replace("\n", "\\n");
         }
 
         private void BrowseFile()
